@@ -1,0 +1,89 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Functions REST API & Execution Engine
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, safeParseJson, generateUuid, defaultStr } from "./utils";
+
+export fn registerFunctionsRoutes(mux: Any): Unit => {
+  // 1. Register Function: POST /admin/functions/:func
+  mux.post("/admin/functions/:func", fn(req: Any, res: Any) => {
+    let s = getState();
+    let fName = http.pathValue(req, "func");
+    let payload = safeParseJson(req.rawBody);
+    auditRequest(req, "Functions", 201);
+    setMsHeaders(res);
+
+    let newFunc = {
+      name: fName,
+      appName: defaultStr(payload.appName, "default-func-app"),
+      runtime: defaultStr(payload.runtime, "dotnet-isolated"),
+      entryPoint: defaultStr(payload.entryPoint, `${fName}.Run`),
+      state: "Running",
+      invocationsCount: 0
+    };
+
+    s.functions.push(newFunc);
+    logEvent("FUNCTIONS", "info", `Registered Azure Function '${fName}'`);
+
+    http.json(res, http.StatusCreated, newFunc);
+  });
+
+  // 2. List Functions: GET /admin/functions
+  mux.get("/admin/functions", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "Functions", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, s.functions);
+  });
+
+  // 3. Get Function: GET /admin/functions/:func
+  mux.get("/admin/functions/:func", fn(req: Any, res: Any) => {
+    let s = getState();
+    let fName = http.pathValue(req, "func");
+    auditRequest(req, "Functions", 200);
+    setMsHeaders(res);
+
+    let matched = s.functions.filter(fn(f: Any): Bool => f.name == fName);
+    if (matched.length > 0) {
+      http.json(res, http.StatusOK, matched[0]);
+    }else {
+      http.json(res, http.StatusNotFound, {error: "FunctionNotFound"});
+    }
+  });
+
+  // 4. Invoke Function: POST /api/:func
+  mux.post("/api/:func", fn(req: Any, res: Any) => {
+    let s = getState();
+    let fName = http.pathValue(req, "func");
+    auditRequest(req, "Functions", 200);
+    setMsHeaders(res);
+
+    let matched = s.functions.filter(fn(f: Any): Bool => f.name == fName);
+    if (matched.length > 0) {
+      matched[0].invocationsCount = matched[0].invocationsCount + 1;
+    }
+
+    logEvent("FUNCTIONS", "info", `Executed Azure Function '${fName}'`);
+    http.json(res, http.StatusOK, {
+      status: "Success",
+      invocationId: generateUuid(),
+      output: `Executed Azure Function '${fName}' in 0.68ms (Aura Native Engine)`,
+      memoryUsageMb: 16
+    });
+  });
+
+  // 5. Delete Function: DELETE /admin/functions/:func
+  mux.delete("/admin/functions/:func", fn(req: Any, res: Any) => {
+    let s = getState();
+    let fName = http.pathValue(req, "func");
+    auditRequest(req, "Functions", 204);
+    setMsHeaders(res);
+
+    s.functions = s.functions.filter(fn(f: Any): Bool => f.name != fName);
+    logEvent("FUNCTIONS", "info", `Deleted Azure Function '${fName}'`);
+
+    res.writeHead(http.StatusNoContent);
+    res.end();
+  });
+};

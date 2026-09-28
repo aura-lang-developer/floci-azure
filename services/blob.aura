@@ -1,0 +1,218 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Blob Storage REST API
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, defaultStr } from "./utils";
+
+export fn registerBlobRoutes(mux: Any): Unit => {
+  // 1. List Containers: GET /devstoreaccount1 (?comp=list) or GET / (?comp=list)
+  let listContainersHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "BlobStorage", 200);
+    setMsHeaders(res);
+
+    let mut xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><EnumerationResults ServiceEndpoint=\"http://localhost:10000/devstoreaccount1\"><Containers>";
+    for c in s.blobContainers {
+      xml = xml + `<Container><Name>${c.name}</Name><Properties><Last-Modified>${c.lastModified}</Last-Modified><Etag>"0x8D8C3E4A1B2C3D4"</Etag></Properties></Container>`;
+    }
+    xml = xml + "</Containers><NextMarker /></EnumerationResults>";
+
+    res.setHeader("Content-Type", "application/xml");
+    res.writeHead(http.StatusOK);
+    res.end(xml);
+  };
+
+  mux.get("/devstoreaccount1", listContainersHandler);
+
+  // 2. Container Operations: PUT /devstoreaccount1/:container (?restype=container or ?restype=queue)
+  mux.put("/devstoreaccount1/:container", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let restype = http.query(req, "restype");
+    setMsHeaders(res);
+
+    if (restype == "queue") {
+      auditRequest(req, "QueueStorage", 201);
+      let exists = s.queueItems.filter(fn(q: Any): Bool => q.name == container);
+      if (exists.length == 0) {
+        s.queueItems.push({
+          name: container,
+          account: "devstoreaccount1",
+          messages: []
+        });
+        logEvent("QUEUE", "info", `Created queue '${container}'`);
+      }
+      res.writeHead(http.StatusCreated);
+      res.end();
+      return();
+    }
+
+    auditRequest(req, "BlobStorage", 201);
+    let exists = s.blobContainers.filter(fn(c: Any): Bool => c.name == container);
+    if (exists.length == 0) {
+      s.blobContainers.push({
+        name: container,
+        account: "devstoreaccount1",
+        publicAccess: "blob",
+        lastModified: "2026-09-28T12:00:00.000Z"
+      });
+      logEvent("BLOB", "info", `Created container '${container}'`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 3. Delete Container: DELETE /devstoreaccount1/:container
+  mux.delete("/devstoreaccount1/:container", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let restype = http.query(req, "restype");
+    setMsHeaders(res);
+
+    if (restype == "queue") {
+      auditRequest(req, "QueueStorage", 204);
+      s.queueItems = s.queueItems.filter(fn(q: Any): Bool => q.name != container);
+      logEvent("QUEUE", "info", `Deleted queue '${container}'`);
+      res.writeHead(http.StatusNoContent);
+      res.end();
+      return();
+    }
+
+    auditRequest(req, "BlobStorage", 202);
+    s.blobContainers = s.blobContainers.filter(fn(c: Any): Bool => c.name != container);
+    s.blobItems = s.blobItems.filter(fn(b: Any): Bool => b.container != container);
+    logEvent("BLOB", "info", `Deleted container '${container}'`);
+
+    res.writeHead(http.StatusAccepted);
+    res.end();
+  });
+
+  // 4. List Blobs or Get Container Metadata: GET /devstoreaccount1/:container
+  mux.get("/devstoreaccount1/:container", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let restype = http.query(req, "restype");
+    setMsHeaders(res);
+
+    if (restype == "queue" || container == "queues") {
+      auditRequest(req, "QueueStorage", 200);
+      let mut xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><EnumerationResults ServiceEndpoint=\"http://localhost:10000/devstoreaccount1\"><Queues>";
+      for q in s.queueItems {
+        xml = xml + `<Queue><Name>${q.name}</Name></Queue>`;
+      }
+      xml = xml + "</Queues><NextMarker /></EnumerationResults>";
+
+      res.setHeader("Content-Type", "application/xml");
+      res.writeHead(http.StatusOK);
+      res.end(xml);
+      return();
+    }
+
+    auditRequest(req, "BlobStorage", 200);
+    let blobs = s.blobItems.filter(fn(b: Any): Bool => b.container == container);
+
+    let mut xml = `<?xml version=\"1.0\" encoding=\"utf-8\"?><EnumerationResults ContainerName=\"${container}\"><Blobs>`;
+    for b in blobs {
+      xml = xml + `<Blob><Name>${b.name}</Name><Properties><Content-Length>${b.size}</Content-Length><Content-Type>${b.contentType}</Content-Type><Last-Modified>${b.lastModified}</Last-Modified></Properties></Blob>`;
+    }
+    xml = xml + "</Blobs><NextMarker /></EnumerationResults>";
+
+    res.setHeader("Content-Type", "application/xml");
+    res.writeHead(http.StatusOK);
+    res.end(xml);
+  });
+
+  // 5. Upload Blob (BlockBlob): PUT /devstoreaccount1/:container/:blob
+  mux.put("/devstoreaccount1/:container/:blob", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let blob = http.pathValue(req, "blob");
+    setMsHeaders(res);
+
+    if (container == "queues") {
+      auditRequest(req, "QueueStorage", 201);
+      let exists = s.queueItems.filter(fn(q: Any): Bool => q.name == blob);
+      if (exists.length == 0) {
+        s.queueItems.push({
+          name: blob,
+          account: "devstoreaccount1",
+          messages: []
+        });
+        logEvent("QUEUE", "info", `Created queue '${blob}'`);
+      }
+      res.writeHead(http.StatusCreated);
+      res.end();
+      return();
+    }
+
+    let content = req.rawBody;
+    let size = content.length;
+    let cType = if (req.headers != () && req.headers["content-type"] != ()) {
+      `${req.headers["content-type"]}`
+    }else {
+      "application/octet-stream"
+    };
+    auditRequest(req, "BlobStorage", 201);
+
+    s.blobItems = s.blobItems.filter(fn(b: Any): Bool => !(b.container == container && b.name == blob));
+
+    let newBlob = {
+      container: container,
+      account: "devstoreaccount1",
+      name: blob,
+      size: size,
+      contentType: cType,
+      blobType: "BlockBlob",
+      content: content,
+      lastModified: "2026-09-28T12:00:00.000Z",
+      etag: "\"0x8D8C3E4A1B2C3D4\""
+    };
+
+    s.blobItems.push(newBlob);
+    logEvent("BLOB", "info", `Uploaded blob '${blob}' to container '${container}' (${size} bytes)`);
+
+    res.setHeader("ETag", newBlob.etag);
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 6. Get Blob Content or Metadata: GET /devstoreaccount1/:container/:blob
+  mux.get("/devstoreaccount1/:container/:blob", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let blob = http.pathValue(req, "blob");
+    auditRequest(req, "BlobStorage", 200);
+    setMsHeaders(res);
+
+    let matched = s.blobItems.filter(fn(b: Any): Bool => b.container == container && b.name == blob);
+    if (matched.length > 0) {
+      let b = matched[0];
+      res.setHeader("Content-Type", b.contentType);
+      res.setHeader("Content-Length", `${b.size}`);
+      res.setHeader("ETag", b.etag);
+      res.setHeader("x-ms-blob-type", b.blobType);
+      res.writeHead(http.StatusOK);
+      res.end(b.content);
+    }else {
+      res.writeHead(http.StatusNotFound);
+      res.end(`BlobNotFound: ${container}/${blob}`);
+    }
+  });
+
+  // 7. Delete Blob: DELETE /devstoreaccount1/:container/:blob
+  mux.delete("/devstoreaccount1/:container/:blob", fn(req: Any, res: Any) => {
+    let s = getState();
+    let container = http.pathValue(req, "container");
+    let blob = http.pathValue(req, "blob");
+    auditRequest(req, "BlobStorage", 202);
+    setMsHeaders(res);
+
+    s.blobItems = s.blobItems.filter(fn(b: Any): Bool => !(b.container == container && b.name == blob));
+    logEvent("BLOB", "info", `Deleted blob '${blob}' from container '${container}'`);
+
+    res.writeHead(http.StatusAccepted);
+    res.end();
+  });
+};

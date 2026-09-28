@@ -1,0 +1,8 @@
+floci-azure-bin
+*.bin
+*.o
+*.a
+*.mjs
+*.mjs.map
+*.log
+.DS_Store

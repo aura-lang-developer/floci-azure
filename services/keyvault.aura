@@ -1,0 +1,164 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Key Vault REST API (Secrets & Keys)
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, safeParseJson, generateUuid, defaultStr, defaultInt, defaultList } from "./utils";
+
+export fn registerKeyVaultRoutes(mux: Any): Unit => {
+  // 1. Set Secret: PUT /secrets/:secret
+  mux.put("/secrets/:secret", fn(req: Any, res: Any) => {
+    let s = getState();
+    let secName = http.pathValue(req, "secret");
+    let payload = safeParseJson(req.rawBody);
+    let val = defaultStr(payload.value, "default_secret_val");
+    let versionId = generateUuid();
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let exists = s.keyVaultSecrets.filter(fn(sec: Any): Bool => sec.name == secName);
+    let secRecord = if (exists.length > 0) {
+      let sec = exists[0];
+      sec.value = val;
+      sec.updated = "2026-09-28T12:00:00.000Z";
+      sec.versions.push({versionId: versionId, value: val, created: "2026-09-28T12:00:00.000Z"});
+      logEvent("KEYVAULT", "info", `Updated secret '${secName}' (v:${versionId})`);
+      sec
+    }else {
+      let sec = {
+        name: secName,
+        vault: "app-vault",
+        value: val,
+        enabled: true,
+        created: "2026-09-28T12:00:00.000Z",
+        updated: "2026-09-28T12:00:00.000Z",
+        versions: [{versionId: versionId, value: val, created: "2026-09-28T12:00:00.000Z"}]
+      };
+      s.keyVaultSecrets.push(sec);
+      logEvent("KEYVAULT", "info", `Created secret '${secName}' in Key Vault`);
+      sec
+    };
+
+    http.json(res, http.StatusOK, {
+      id: `http://localhost:10000/secrets/${secName}/${versionId}`,
+      value: val,
+      attributes: {enabled: true, created: 1790623140, updated: 1790623140}
+    });
+  });
+
+  // 2. Get Secret: GET /secrets/:secret
+  mux.get("/secrets/:secret", fn(req: Any, res: Any) => {
+    let s = getState();
+    let secName = http.pathValue(req, "secret");
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let matched = s.keyVaultSecrets.filter(fn(sec: Any): Bool => sec.name == secName);
+    if (matched.length > 0) {
+      let sec = matched[0];
+      http.json(res, http.StatusOK, {
+        id: `http://localhost:10000/secrets/${secName}/latest`,
+        value: sec.value,
+        attributes: {enabled: sec.enabled}
+      });
+    }else {
+      http.json(res, http.StatusNotFound, {
+        error: {code: "SecretNotFound", message: `Secret not found: ${secName}`}
+      });
+    }
+  });
+
+  // 3. List Secrets: GET /secrets
+  mux.get("/secrets", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let items = s.keyVaultSecrets.map(fn(sec: Any): Any => {
+      {id: `http://localhost:10000/secrets/${sec.name}`, attributes: {enabled: sec.enabled}}
+    });
+
+    http.json(res, http.StatusOK, {value: items});
+  });
+
+  // 4. Delete Secret: DELETE /secrets/:secret
+  mux.delete("/secrets/:secret", fn(req: Any, res: Any) => {
+    let s = getState();
+    let secName = http.pathValue(req, "secret");
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    s.keyVaultSecrets = s.keyVaultSecrets.filter(fn(sec: Any): Bool => sec.name != secName);
+    logEvent("KEYVAULT", "info", `Deleted secret '${secName}'`);
+
+    http.json(res, http.StatusOK, {recoveryId: `http://localhost:10000/deletedsecrets/${secName}`});
+  });
+
+  // 5. Create Key: POST /keys/:key/create
+  mux.post("/keys/:key/create", fn(req: Any, res: Any) => {
+    let s = getState();
+    let keyName = http.pathValue(req, "key");
+    let payload = safeParseJson(req.rawBody);
+    let kty = defaultStr(payload.kty, "RSA");
+    let kSize = defaultInt(payload.key_size, 2048);
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let kRecord = {
+      name: keyName,
+      vault: "app-vault",
+      keyType: kty,
+      keySize: kSize,
+      created: "2026-09-28T12:00:00.000Z"
+    };
+    s.keyVaultKeys.push(kRecord);
+    logEvent("KEYVAULT", "info", `Created Crypto Key '${keyName}'`);
+
+    http.json(res, http.StatusOK, {
+      key: {kid: `http://localhost:10000/keys/${keyName}/1`, kty: kty, key_ops: ["encrypt", "decrypt"]}
+    });
+  });
+
+  // 6. List Keys: GET /keys
+  mux.get("/keys", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let items = s.keyVaultKeys.map(fn(k: Any): Any => {
+      {kid: `http://localhost:10000/keys/${k.name}`, attributes: {enabled: true}}
+    });
+
+    http.json(res, http.StatusOK, {value: items});
+  });
+
+  // 7. Encrypt Key: POST /keys/:key/encrypt
+  mux.post("/keys/:key/encrypt", fn(req: Any, res: Any) => {
+    let keyName = http.pathValue(req, "key");
+    let payload = safeParseJson(req.rawBody);
+    let val = defaultStr(payload.value, "");
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let mockCipher = `enc_${val}_azure_vault_cipher`;
+    http.json(res, http.StatusOK, {
+      kid: `http://localhost:10000/keys/${keyName}`,
+      value: mockCipher
+    });
+  });
+
+  // 8. Decrypt Key: POST /keys/:key/decrypt
+  mux.post("/keys/:key/decrypt", fn(req: Any, res: Any) => {
+    let keyName = http.pathValue(req, "key");
+    let payload = safeParseJson(req.rawBody);
+    let cipher = defaultStr(payload.value, "");
+    auditRequest(req, "KeyVault", 200);
+    setMsHeaders(res);
+
+    let recoveredPlain = cipher.replace("enc_", "").replace("_azure_vault_cipher", "");
+    http.json(res, http.StatusOK, {
+      kid: `http://localhost:10000/keys/${keyName}`,
+      value: recoveredPlain
+    });
+  });
+};

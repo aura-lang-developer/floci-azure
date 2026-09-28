@@ -1,0 +1,157 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Cosmos DB & Table Storage REST API
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, safeParseJson, generateUuid, defaultStr } from "./utils";
+
+export fn registerCosmosRoutes(mux: Any): Unit => {
+  // 1. Create Cosmos Database: POST /dbs
+  mux.post("/dbs", fn(req: Any, res: Any) => {
+    let s = getState();
+    let payload = safeParseJson(req.rawBody);
+    let dbId = defaultStr(payload.id, "DefaultDatabase");
+    auditRequest(req, "CosmosDB", 201);
+    setMsHeaders(res);
+
+    let exists = s.cosmosDatabases.filter(fn(d: Any): Bool => d.id == dbId);
+    let dbRecord = if (exists.length > 0) {
+      exists[0]
+    }else {
+      let d = {
+        id: dbId,
+        _rid: generateUuid(),
+        _ts: 1790623140,
+        collections: []
+      };
+      s.cosmosDatabases.push(d);
+      logEvent("COSMOS", "info", `Created Cosmos DB database '${dbId}'`);
+      d
+    };
+
+    http.json(res, http.StatusCreated, dbRecord);
+  });
+
+  // 2. List Cosmos Databases: GET /dbs
+  mux.get("/dbs", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "CosmosDB", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {
+      _rid: "",
+      Databases: s.cosmosDatabases,
+      _count: s.cosmosDatabases.length
+    });
+  });
+
+  // 3. Create Collection: POST /dbs/:db/colls
+  mux.post("/dbs/:db/colls", fn(req: Any, res: Any) => {
+    let s = getState();
+    let dbId = http.pathValue(req, "db");
+    let payload = safeParseJson(req.rawBody);
+    let collId = defaultStr(payload.id, "DefaultCollection");
+    auditRequest(req, "CosmosDB", 201);
+    setMsHeaders(res);
+
+    let collRecord = {
+      id: collId,
+      _rid: generateUuid(),
+      _ts: 1790623140,
+      documents: []
+    };
+
+    let matched = s.cosmosDatabases.filter(fn(d: Any): Bool => d.id == dbId);
+    if (matched.length > 0) {
+      matched[0].collections.push(collRecord);
+      logEvent("COSMOS", "info", `Created collection '${collId}' in database '${dbId}'`);
+    }
+
+    http.json(res, http.StatusCreated, collRecord);
+  });
+
+  // 4. List Collections: GET /dbs/:db/colls
+  mux.get("/dbs/:db/colls", fn(req: Any, res: Any) => {
+    let s = getState();
+    let dbId = http.pathValue(req, "db");
+    auditRequest(req, "CosmosDB", 200);
+    setMsHeaders(res);
+
+    let matched = s.cosmosDatabases.filter(fn(d: Any): Bool => d.id == dbId);
+    let colls = if (matched.length > 0) {matched[0].collections}else {[]};
+    http.json(res, http.StatusOK, {DocumentCollections: colls, _count: colls.length});
+  });
+
+  // 5. Create Document: POST /dbs/:db/colls/:coll/docs
+  mux.post("/dbs/:db/colls/:coll/docs", fn(req: Any, res: Any) => {
+    let s = getState();
+    let dbId = http.pathValue(req, "db");
+    let collId = http.pathValue(req, "coll");
+    let payload = safeParseJson(req.rawBody);
+    let docId = defaultStr(payload.id, generateUuid());
+    auditRequest(req, "CosmosDB", 201);
+    setMsHeaders(res);
+
+    let docRecord = payload;
+    docRecord.id = docId;
+    docRecord._rid = generateUuid();
+    docRecord._ts = 1790623140;
+
+    let matchedDb = s.cosmosDatabases.filter(fn(d: Any): Bool => d.id == dbId);
+    if (matchedDb.length > 0) {
+      let matchedColl = matchedDb[0].collections.filter(fn(c: Any): Bool => c.id == collId);
+      if (matchedColl.length > 0) {
+        matchedColl[0].documents.push(docRecord);
+        logEvent("COSMOS", "info", `Created document '${docId}' in '${dbId}/${collId}'`);
+      }
+    }
+
+    http.json(res, http.StatusCreated, docRecord);
+  });
+
+  // 6. List Documents: GET /dbs/:db/colls/:coll/docs
+  mux.get("/dbs/:db/colls/:coll/docs", fn(req: Any, res: Any) => {
+    let s = getState();
+    let dbId = http.pathValue(req, "db");
+    let collId = http.pathValue(req, "coll");
+    auditRequest(req, "CosmosDB", 200);
+    setMsHeaders(res);
+
+    let matchedDb = s.cosmosDatabases.filter(fn(d: Any): Bool => d.id == dbId);
+    let docs = if (matchedDb.length > 0) {
+      let matchedColl = matchedDb[0].collections.filter(fn(c: Any): Bool => c.id == collId);
+      if (matchedColl.length > 0) {matchedColl[0].documents}else {[]}
+    }else {
+      []
+    };
+
+    http.json(res, http.StatusOK, {Documents: docs, _count: docs.length});
+  });
+
+  // 7. Azure Tables: Create Table (POST /Tables)
+  mux.post("/Tables", fn(req: Any, res: Any) => {
+    let s = getState();
+    let payload = safeParseJson(req.rawBody);
+    let tblName = defaultStr(payload.TableName, "Table1");
+    auditRequest(req, "TableStorage", 201);
+    setMsHeaders(res);
+
+    let exists = s.tables.filter(fn(t: Any): Bool => t.name == tblName);
+    if (exists.length == 0) {
+      s.tables.push({
+        name: tblName,
+        rows: []
+      });
+      logEvent("TABLES", "info", `Created table '${tblName}'`);
+    }
+
+    http.json(res, http.StatusCreated, {TableName: tblName});
+  });
+
+  // 8. Azure Tables: List Tables (GET /Tables)
+  mux.get("/Tables", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "TableStorage", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {value: s.tables});
+  });
+};

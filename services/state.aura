@@ -1,0 +1,177 @@
+// ==============================================================================
+// FLOCI-AZURE: In-Memory Microsoft Azure State Store
+// ==============================================================================
+
+export type AzureStore = {
+  blobContainers: List<Any>,
+  blobItems: List<Any>,
+  queueItems: List<Any>,
+  serviceBusQueues: List<Any>,
+  serviceBusTopics: List<Any>,
+  cosmosDatabases: List<Any>,
+  tables: List<Any>,
+  keyVaultSecrets: List<Any>,
+  keyVaultKeys: List<Any>,
+  functions: List<Any>,
+  monitorLogs: List<Any>,
+  liveLogs: List<Any>,
+  requestAuditLog: List<Any>,
+  totalRequestsCount: Int,
+  bootTimestamp: Int,
+  nextIdCounter: Int
+};
+
+let storeInstance: AzureStore = {
+  blobContainers: [
+    {
+      name: "default-container",
+      account: "devstoreaccount1",
+      publicAccess: "blob",
+      lastModified: "2026-09-28T12:00:00.000Z"
+    }
+  ],
+  blobItems: [
+    {
+      container: "default-container",
+      account: "devstoreaccount1",
+      name: "welcome.txt",
+      size: 79,
+      contentType: "text/plain",
+      blobType: "BlockBlob",
+      content: "Welcome to Floci-Azure! Ultra-fast local Microsoft Azure emulator in Aura Lang.",
+      lastModified: "2026-09-28T12:00:00.000Z",
+      etag: "\"0x8D8C3E4A1B2C3D4\""
+    }
+  ],
+  queueItems: [
+    {
+      name: "task-queue",
+      account: "devstoreaccount1",
+      messages: [
+        {
+          messageId: "msg-q-001",
+          messageText: "{\"task\":\"ProcessInvoice\",\"id\":1001}",
+          insertionTime: "2026-09-28T12:00:00.000Z",
+          expirationTime: "2026-10-05T12:00:00.000Z",
+          popReceipt: "rcpt-001"
+        }
+      ]
+    }
+  ],
+  serviceBusQueues: [
+    {
+      name: "orders",
+      namespace: "default-sb-namespace",
+      messages: []
+    }
+  ],
+  serviceBusTopics: [
+    {
+      name: "billing-events",
+      namespace: "default-sb-namespace",
+      subscriptions: [
+        {
+          name: "finance-sub",
+          messages: []
+        }
+      ]
+    }
+  ],
+  cosmosDatabases: [
+    {
+      id: "AppDatabase",
+      collections: [
+        {
+          id: "Users",
+          documents: [
+            {id: "user-101", username: "azure_dev", role: "DevOps Engineer", active: true}
+          ]
+        }
+      ]
+    }
+  ],
+  tables: [
+    {
+      name: "ConfigurationTable",
+      rows: [
+        {PartitionKey: "Global", RowKey: "Env", Value: "Development"}
+      ]
+    }
+  ],
+  keyVaultSecrets: [
+    {
+      name: "db-connection-string",
+      vault: "app-vault",
+      value: "Server=localhost;Database=AzureDev;User Id=sa;Password=FlociAzure2026!;",
+      enabled: true,
+      created: "2026-09-28T12:00:00.000Z",
+      updated: "2026-09-28T12:00:00.000Z",
+      versions: [
+        {versionId: "v1", value: "Server=localhost;Database=AzureDev;", created: "2026-09-28T12:00:00.000Z"}
+      ]
+    }
+  ],
+  keyVaultKeys: [
+    {
+      name: "master-encryption-key",
+      vault: "app-vault",
+      keyType: "RSA",
+      keySize: 2048,
+      created: "2026-09-28T12:00:00.000Z"
+    }
+  ],
+  functions: [
+    {
+      name: "orderProcessor",
+      appName: "local-function-app",
+      runtime: "dotnet-isolated",
+      entryPoint: "OrderFunction.Run",
+      state: "Running",
+      invocationsCount: 0
+    }
+  ],
+  monitorLogs: [
+    {
+      name: "AppTelemetry",
+      time: "2026-09-28T12:00:00.000Z",
+      iKey: "local-instrumentation-key-000",
+      data: {message: "Floci-Azure emulator online"}
+    }
+  ],
+  liveLogs: [
+    {timestamp: "12:00:00", level: "info", service: "AZURE-CORE", message: "Floci-Azure emulator booted in 1.81ms with zero Docker overhead"},
+    {timestamp: "12:00:01", level: "success", service: "SERVICEMUX", message: "Listening on http://localhost:10000 (Universal Azure Data Plane)"}
+  ],
+  requestAuditLog: [],
+  totalRequestsCount: 0,
+  bootTimestamp: time.now(),
+  nextIdCounter: 1000
+};
+
+export fn getState(): Any => {
+  storeInstance
+};
+
+export fn incrementRequestsCount(): Unit => {
+  storeInstance.totalRequestsCount = storeInstance.totalRequestsCount + 1;
+};
+
+export fn clearRequestAuditLog(): Unit => {
+  storeInstance.requestAuditLog = [];
+};
+
+export fn resetState(): Unit => {
+  storeInstance.blobContainers = [];
+  storeInstance.blobItems = [];
+  storeInstance.queueItems = [];
+  storeInstance.serviceBusQueues = [];
+  storeInstance.serviceBusTopics = [];
+  storeInstance.cosmosDatabases = [];
+  storeInstance.tables = [];
+  storeInstance.keyVaultSecrets = [];
+  storeInstance.keyVaultKeys = [];
+  storeInstance.functions = [];
+  storeInstance.monitorLogs = [];
+  storeInstance.requestAuditLog = [];
+  storeInstance.liveLogs = [];
+};

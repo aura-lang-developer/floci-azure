@@ -1,0 +1,32 @@
+// ==============================================================================
+// FLOCI-AZURE: CORS, Request Buffering & Azure Header Middleware
+// ==============================================================================
+
+import { incrementRequestsCount } from "./state";
+
+export fn registerCorsAndBufferMiddleware(mux: Any): Unit => {
+  mux.use(fn(req: Any, res: Any, next: Any) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-ms-version, x-ms-date, x-ms-blob-type, x-ms-blob-content-type, x-ms-client-request-id, x-ms-lease-id, Origin, Accept");
+    res.setHeader("X-Powered-By", "Floci-Azure (Aura Lang Native Engine)");
+    res.setHeader("Server", "floci-azure/0.1.0");
+
+    if (req.method == "OPTIONS") {
+      res.writeHead(http.StatusNoContent);
+      res.end();
+      return();
+    }
+
+    let mut buffer = "";
+    req.on("data", fn(chunk: Any) => {
+      buffer = buffer + chunk;
+    });
+
+    req.on("end", fn() => {
+      req.rawBody = buffer;
+      incrementRequestsCount();
+      next();
+    });
+  });
+};

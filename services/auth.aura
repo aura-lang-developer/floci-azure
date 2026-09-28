@@ -1,0 +1,52 @@
+// ==============================================================================
+// FLOCI-AZURE: Microsoft Entra ID & Azure IMDS Authentication Emulation
+// ==============================================================================
+
+import { auditRequest, logEvent, setMsHeaders } from "./utils";
+
+export fn registerAuthRoutes(mux: Any): Unit => {
+  // 1. Entra ID (Azure AD) OAuth2 v2.0 Token Mock Endpoint
+  let tokenHandler = fn(req: Any, res: Any) => {
+    auditRequest(req, "EntraID", 200);
+    setMsHeaders(res);
+    logEvent("AUTH", "info", "Issued mock Entra ID Bearer token for client handshake");
+    http.json(res, http.StatusOK, {
+      token_type: "Bearer",
+      expires_in: 3600,
+      ext_expires_in: 3600,
+      access_token: "eyJhbGciOiJSUzI1NiJ9.floci_azure_mock_bearer_token_local"
+    });
+  };
+
+  mux.post("/oauth2/v2.0/token", tokenHandler);
+  mux.post("/token", tokenHandler);
+  mux.post("/:tenant/oauth2/v2.0/token", tokenHandler);
+
+  // 2. Azure Instance Metadata Service (IMDS) Mock
+  mux.get("/metadata/identity/oauth2/token", fn(req: Any, res: Any) => {
+    auditRequest(req, "IMDS", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {
+      access_token: "eyJhbGciOiJSUzI1NiJ9.floci_azure_mock_bearer_token_local",
+      expires_on: "1790623140",
+      resource: "https://management.azure.com/",
+      token_type: "Bearer",
+      client_id: "local-client-id"
+    });
+  });
+
+  mux.get("/metadata/instance", fn(req: Any, res: Any) => {
+    auditRequest(req, "IMDS", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {
+      compute: {
+        location: "eastus",
+        name: "floci-local-node",
+        osType: "Linux",
+        resourceGroupName: "local-rg",
+        subscriptionId: "00000000-0000-0000-0000-000000000000",
+        vmId: "1234abcd-12ab-34cd-56ef-1234567890ab"
+      }
+    });
+  });
+};

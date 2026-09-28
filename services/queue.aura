@@ -1,0 +1,150 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Queue Storage REST API
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, generateUuid, defaultStr } from "./utils";
+
+export fn registerQueueRoutes(mux: Any): Unit => {
+  // 1. Create Queue: PUT /devstoreaccount1/queues/:queue
+  mux.put("/devstoreaccount1/queues/:queue", fn(req: Any, res: Any) => {
+    let s = getState();
+    let queue = http.pathValue(req, "queue");
+    auditRequest(req, "QueueStorage", 201);
+    setMsHeaders(res);
+
+    let exists = s.queueItems.filter(fn(q: Any): Bool => q.name == queue);
+    if (exists.length == 0) {
+      s.queueItems.push({
+        name: queue,
+        account: "devstoreaccount1",
+        messages: []
+      });
+      logEvent("QUEUE", "info", `Created queue '${queue}'`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 2. List Queues: GET /devstoreaccount1/queues
+  mux.get("/devstoreaccount1/queues", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "QueueStorage", 200);
+    setMsHeaders(res);
+
+    let mut xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><EnumerationResults ServiceEndpoint=\"http://localhost:10000/devstoreaccount1\"><Queues>";
+    for q in s.queueItems {
+      xml = xml + `<Queue><Name>${q.name}</Name></Queue>`;
+    }
+    xml = xml + "</Queues><NextMarker /></EnumerationResults>";
+
+    res.setHeader("Content-Type", "application/xml");
+    res.writeHead(http.StatusOK);
+    res.end(xml);
+  });
+
+  // 3. Put Message (Enqueue)
+  let enqueueHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    let queue = http.pathValue(req, "queue");
+    let raw = req.rawBody;
+    let msgId = generateUuid();
+    let popReceipt = `pop-${generateUuid()}`;
+
+    // Extract message text from XML or raw body
+    let mut msgText = raw;
+    if (raw.includes("<MessageText>")) {
+      let parts = raw.split("<MessageText>");
+      if (parts.length > 1) {
+        let subParts = parts[1].split("</MessageText>");
+        msgText = subParts[0];
+      }
+    }
+
+    auditRequest(req, "QueueStorage", 201);
+    setMsHeaders(res);
+
+    let matched = s.queueItems.filter(fn(q: Any): Bool => q.name == queue);
+    if (matched.length > 0) {
+      matched[0].messages.push({
+        messageId: msgId,
+        messageText: msgText,
+        insertionTime: "2026-09-28T12:00:00.000Z",
+        expirationTime: "2026-10-05T12:00:00.000Z",
+        popReceipt: popReceipt
+      });
+      logEvent("QUEUE", "info", `Enqueued message into '${queue}'`);
+    }
+
+    let respXml = `<?xml version=\"1.0\" encoding=\"utf-8\"?><QueueMessagesList><QueueMessage><MessageId>${msgId}</MessageId><InsertionTime>2026-09-28T12:00:00.000Z</InsertionTime><ExpirationTime>2026-10-05T12:00:00.000Z</ExpirationTime><PopReceipt>${popReceipt}</PopReceipt><TimeNextVisible>2026-09-28T12:00:00.000Z</TimeNextVisible></QueueMessage></QueueMessagesList>`;
+    res.setHeader("Content-Type", "application/xml");
+    res.writeHead(http.StatusCreated);
+    res.end(respXml);
+  };
+
+  mux.post("/devstoreaccount1/queues/:queue/messages", enqueueHandler);
+  mux.post("/devstoreaccount1/:queue/messages", enqueueHandler);
+
+  // 4. Get Messages (Dequeue / Peek)
+  let dequeueHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    let queue = http.pathValue(req, "queue");
+    auditRequest(req, "QueueStorage", 200);
+    setMsHeaders(res);
+
+    let matched = s.queueItems.filter(fn(q: Any): Bool => q.name == queue);
+    let msgs = if (matched.length > 0) {matched[0].messages}else {[]};
+
+    let mut xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><QueueMessagesList>";
+    for m in msgs {
+      xml = xml + `<QueueMessage><MessageId>${m.messageId}</MessageId><InsertionTime>${m.insertionTime}</InsertionTime><ExpirationTime>${m.expirationTime}</ExpirationTime><PopReceipt>${m.popReceipt}</PopReceipt><TimeNextVisible>2026-09-28T12:00:30.000Z</TimeNextVisible><DequeueCount>1</DequeueCount><MessageText>${m.messageText}</MessageText></QueueMessage>`;
+    }
+    xml = xml + "</QueueMessagesList>";
+
+    res.setHeader("Content-Type", "application/xml");
+    res.writeHead(http.StatusOK);
+    res.end(xml);
+  };
+
+  mux.get("/devstoreaccount1/queues/:queue/messages", dequeueHandler);
+  mux.get("/devstoreaccount1/:queue/messages", dequeueHandler);
+
+  // 5. Delete Message
+  let deleteMessageHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    let queue = http.pathValue(req, "queue");
+    let msgId = http.pathValue(req, "messageId");
+    auditRequest(req, "QueueStorage", 204);
+    setMsHeaders(res);
+
+    let matched = s.queueItems.filter(fn(q: Any): Bool => q.name == queue);
+    if (matched.length > 0) {
+      matched[0].messages = matched[0].messages.filter(fn(m: Any): Bool => m.messageId != msgId);
+      logEvent("QUEUE", "info", `Deleted message '${msgId}' from queue '${queue}'`);
+    }
+
+    res.writeHead(http.StatusNoContent);
+    res.end();
+  };
+
+  mux.delete("/devstoreaccount1/queues/:queue/messages/:messageId", deleteMessageHandler);
+  mux.delete("/devstoreaccount1/:queue/messages/:messageId", deleteMessageHandler);
+
+  // 6. Delete Queue
+  let deleteQueueHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    let queue = http.pathValue(req, "queue");
+    auditRequest(req, "QueueStorage", 204);
+    setMsHeaders(res);
+
+    s.queueItems = s.queueItems.filter(fn(q: Any): Bool => q.name != queue);
+    logEvent("QUEUE", "info", `Deleted queue '${queue}'`);
+
+    res.writeHead(http.StatusNoContent);
+    res.end();
+  };
+
+  mux.delete("/devstoreaccount1/queues/:queue", deleteQueueHandler);
+  mux.delete("/devstoreaccount1/:queue", deleteQueueHandler);
+};

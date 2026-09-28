@@ -1,0 +1,183 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Service Bus REST API
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, safeParseJson, generateUuid, defaultStr } from "./utils";
+
+export fn registerServiceBusRoutes(mux: Any): Unit => {
+  // 1. Create SB Queue: PUT /servicebus/queues/:queue
+  mux.put("/servicebus/queues/:queue", fn(req: Any, res: Any) => {
+    let s = getState();
+    let qName = http.pathValue(req, "queue");
+    auditRequest(req, "ServiceBus", 201);
+    setMsHeaders(res);
+
+    let exists = s.serviceBusQueues.filter(fn(q: Any): Bool => q.name == qName);
+    if (exists.length == 0) {
+      s.serviceBusQueues.push({
+        name: qName,
+        namespace: "local-namespace",
+        messages: []
+      });
+      logEvent("SERVICEBUS", "info", `Created Service Bus queue '${qName}'`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 2. List SB Queues: GET /servicebus/queues
+  mux.get("/servicebus/queues", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "ServiceBus", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {queues: s.serviceBusQueues});
+  });
+
+  // 3. Send Message to SB Queue: POST /servicebus/queues/:queue/messages
+  mux.post("/servicebus/queues/:queue/messages", fn(req: Any, res: Any) => {
+    let s = getState();
+    let qName = http.pathValue(req, "queue");
+    let content = req.rawBody;
+    let msgId = generateUuid();
+    auditRequest(req, "ServiceBus", 201);
+    setMsHeaders(res);
+
+    let matched = s.serviceBusQueues.filter(fn(q: Any): Bool => q.name == qName);
+    if (matched.length > 0) {
+      matched[0].messages.push({
+        messageId: msgId,
+        body: content,
+        enqueuedTime: "2026-09-28T12:00:00.000Z"
+      });
+      logEvent("SERVICEBUS", "info", `Sent message '${msgId}' to queue '${qName}'`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 4. Receive/Read Message from SB Queue: POST /servicebus/queues/:queue/messages/head
+  mux.post("/servicebus/queues/:queue/messages/head", fn(req: Any, res: Any) => {
+    let s = getState();
+    let qName = http.pathValue(req, "queue");
+    auditRequest(req, "ServiceBus", 200);
+    setMsHeaders(res);
+
+    let matched = s.serviceBusQueues.filter(fn(q: Any): Bool => q.name == qName);
+    if (matched.length > 0 && matched[0].messages.length > 0) {
+      let msg = matched[0].messages.shift();
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("BrokerProperties", JSON.stringify({MessageId: msg.messageId, SequenceNumber: 1}));
+      res.writeHead(http.StatusOK);
+      res.end(msg.body);
+    }else {
+      res.writeHead(http.StatusNoContent);
+      res.end();
+    }
+  });
+
+  // 5. Create SB Topic: PUT /servicebus/topics/:topic
+  mux.put("/servicebus/topics/:topic", fn(req: Any, res: Any) => {
+    let s = getState();
+    let tName = http.pathValue(req, "topic");
+    auditRequest(req, "ServiceBus", 201);
+    setMsHeaders(res);
+
+    let exists = s.serviceBusTopics.filter(fn(t: Any): Bool => t.name == tName);
+    if (exists.length == 0) {
+      s.serviceBusTopics.push({
+        name: tName,
+        namespace: "local-namespace",
+        subscriptions: []
+      });
+      logEvent("SERVICEBUS", "info", `Created Service Bus topic '${tName}'`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 6. List SB Topics: GET /servicebus/topics
+  mux.get("/servicebus/topics", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "ServiceBus", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {topics: s.serviceBusTopics});
+  });
+
+  // 7. Create SB Subscription: PUT /servicebus/topics/:topic/subscriptions/:sub
+  mux.put("/servicebus/topics/:topic/subscriptions/:sub", fn(req: Any, res: Any) => {
+    let s = getState();
+    let tName = http.pathValue(req, "topic");
+    let sName = http.pathValue(req, "sub");
+    auditRequest(req, "ServiceBus", 201);
+    setMsHeaders(res);
+
+    let matched = s.serviceBusTopics.filter(fn(t: Any): Bool => t.name == tName);
+    if (matched.length > 0) {
+      let subs = matched[0].subscriptions.filter(fn(sub: Any): Bool => sub.name == sName);
+      if (subs.length == 0) {
+        matched[0].subscriptions.push({
+          name: sName,
+          messages: []
+        });
+        logEvent("SERVICEBUS", "info", `Created subscription '${sName}' on topic '${tName}'`);
+      }
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 8. Publish Message to SB Topic (Auto-Fanout): POST /servicebus/topics/:topic/messages
+  mux.post("/servicebus/topics/:topic/messages", fn(req: Any, res: Any) => {
+    let s = getState();
+    let tName = http.pathValue(req, "topic");
+    let content = req.rawBody;
+    let msgId = generateUuid();
+    auditRequest(req, "ServiceBus", 201);
+    setMsHeaders(res);
+
+    let matched = s.serviceBusTopics.filter(fn(t: Any): Bool => t.name == tName);
+    if (matched.length > 0) {
+      for sub in matched[0].subscriptions {
+        sub.messages.push({
+          messageId: msgId,
+          body: content,
+          enqueuedTime: "2026-09-28T12:00:00.000Z"
+        });
+      }
+      logEvent("SERVICEBUS", "info", `Published message '${msgId}' to topic '${tName}' (${matched[0].subscriptions.length} subs fanout)`);
+    }
+
+    res.writeHead(http.StatusCreated);
+    res.end();
+  });
+
+  // 9. Read Message from SB Subscription: POST /servicebus/topics/:topic/subscriptions/:sub/messages/head
+  mux.post("/servicebus/topics/:topic/subscriptions/:sub/messages/head", fn(req: Any, res: Any) => {
+    let s = getState();
+    let tName = http.pathValue(req, "topic");
+    let sName = http.pathValue(req, "sub");
+    auditRequest(req, "ServiceBus", 200);
+    setMsHeaders(res);
+
+    let matched = s.serviceBusTopics.filter(fn(t: Any): Bool => t.name == tName);
+    if (matched.length > 0) {
+      let subMatched = matched[0].subscriptions.filter(fn(sub: Any): Bool => sub.name == sName);
+      if (subMatched.length > 0 && subMatched[0].messages.length > 0) {
+        let msg = subMatched[0].messages.shift();
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("BrokerProperties", JSON.stringify({MessageId: msg.messageId, SequenceNumber: 1}));
+        res.writeHead(http.StatusOK);
+        res.end(msg.body);
+        return();
+      }
+    }
+
+    res.writeHead(http.StatusNoContent);
+    res.end();
+  });
+};

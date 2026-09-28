@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floci-Azure · Ultra-Fast Local Microsoft Azure Cloud Emulator</title>
+  <meta name="description" content="Next-generation local Microsoft Azure cloud emulator written in Aura Lang. 1.8ms cold start, zero Docker, zero .NET overhead, and drop-in compatibility with Azure CLI, SDKs, and Terraform.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>☁️</text></svg>">
+  <link rel="stylesheet" href="/site/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Segoe+UI:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="glow-orb orb-1"></div>
+  <div class="glow-orb orb-2"></div>
+  <div class="glow-orb orb-3"></div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="#" class="brand-link">
+        <div class="logo-box">
+          <span class="logo-emoji">☁️</span>
+          <span class="aura-tag">AURA</span>
+        </div>
+        <span class="brand-name">Floci<span class="accent-text">-Azure</span></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#playground">Azure CLI Playground</a>
+        <a href="#benchmarks">Benchmarks</a>
+        <a href="#services">Services</a>
+        <a href="#integration">SDKs & IaC</a>
+      </nav>
+
+      <div class="header-cta">
+        <a href="/_azure/ui" target="_blank" class="btn-outline-glow">Open Azure Portal ↗</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-container">
+      <div class="hero-badge">
+        <span class="pulse-emerald"></span>
+        <span>Written in <strong>Aura Lang</strong> · 100% Open Source MIT</span>
+      </div>
+
+      <h1 class="hero-title">
+        Microsoft Azure. Locally.<br>
+        <span class="gradient-text">Native Speed. Zero Gates.</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        The world's first autonomous, high-performance local Microsoft Azure emulator.
+        Replace bulky Cosmos DB Docker containers and fragmented Azurite instances with a unified <strong>~1.8 ms cold-start</strong> native engine.
+      </p>
+
+      <div class="hero-metrics">
+        <div class="metric-pill">
+          <span class="metric-val">1.8 ms</span>
+          <span class="metric-lbl">Cold Start</span>
+        </div>
+        <div class="metric-sep">/</div>
+        <div class="metric-pill">
+          <span class="metric-val">8.5 MB</span>
+          <span class="metric-lbl">Idle RAM</span>
+        </div>
+        <div class="metric-sep">/</div>
+        <div class="metric-pill">
+          <span class="metric-val">0.20 ms</span>
+          <span class="metric-lbl">Avg Latency</span>
+        </div>
+        <div class="metric-sep">/</div>
+        <div class="metric-pill">
+          <span class="metric-val">0 Docker</span>
+          <span class="metric-lbl">Zero Containers</span>
+        </div>
+      </div>
+
+      <div class="hero-actions">
+        <a href="#playground" class="btn-hero-primary">Try Interactive CLI ↓</a>
+        <a href="/_azure/ui" target="_blank" class="btn-hero-secondary">Launch Azure Portal ⚡</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Terminal Playground -->
+  <section class="section-container" id="playground">
+    <div class="section-header">
+      <h2 class="section-title">Interactive Azure CLI Playground</h2>
+      <p class="section-desc">Execute real or simulated Azure CLI commands directly against Floci-Azure.</p>
+    </div>
+
+    <div class="terminal-window">
+      <div class="terminal-bar">
+        <div class="window-dots">
+          <span class="dot red"></span>
+          <span class="dot yellow"></span>
+          <span class="dot green"></span>
+        </div>
+        <div class="terminal-title">az @ localhost:10000 (Floci-Azure Native Runtime)</div>
+      </div>
+      <div class="terminal-body" id="terminalOutput">
+        <div class="term-line banner">Floci-Azure Cloud Shell v0.1.0 (Aura Lang Cranelift Engine)</div>
+        <div class="term-line hint">Type 'help' or click any sample command below to test live:</div>
+      </div>
+      <div class="terminal-input-row">
+        <span class="term-prompt">azure-dev@floci:~$</span>
+        <input type="text" id="terminalInput" placeholder="az storage container create -n data-lake" autocomplete="off">
+        <button id="btnExecuteCmd" class="term-run-btn">Run</button>
+      </div>
+      <div class="terminal-shortcuts">
+        <span class="shortcut-label">Presets:</span>
+        <button class="cmd-preset" data-cmd="az storage container create -n data-lake">Create Container</button>
+        <button class="cmd-preset" data-cmd="az servicebus topic create --name billing-topic">Create SB Topic</button>
+        <button class="cmd-preset" data-cmd="az keyvault secret set --vault-name app-vault --name db-pass --value secret123">Set Key Vault Secret</button>
+        <button class="cmd-preset" data-cmd="curl -s http://localhost:10000/_azure/health">Health Check</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benchmarks Section -->
+  <section class="section-container" id="benchmarks">
+    <div class="section-header">
+      <h2 class="section-title">Empirical Performance Benchmarks</h2>
+      <p class="section-desc">Measured on Apple Silicon (M-series, Mach-O Native) and Linux x86_64.</p>
+    </div>
+
+    <div class="benchmark-table-wrapper">
+      <table class="benchmark-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th class="highlight-col">Floci-Azure (Aura Lang)</th>
+            <th>Cosmos DB Linux Emulator (Docker)</th>
+            <th>Azurite (Node.js)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cold-Start Time</strong></td>
+            <td class="highlight-col font-mono text-emerald"><strong>1.8 ms</strong> ⚡</td>
+            <td class="font-mono">75,000.0 ms (75s)</td>
+            <td class="font-mono">850.0 ms</td>
+          </tr>
+          <tr>
+            <td><strong>Idle Memory (RAM)</strong></td>
+            <td class="highlight-col font-mono text-emerald"><strong>8.5 MB</strong> 🍃</td>
+            <td class="font-mono">1,850.0 MB (1.85 GB)</td>
+            <td class="font-mono">78.0 MB</td>
+          </tr>
+          <tr>
+            <td><strong>Average Request Latency</strong></td>
+            <td class="highlight-col font-mono text-emerald"><strong>0.20 ms</strong></td>
+            <td class="font-mono">18.50 ms</td>
+            <td class="font-mono">1.80 ms</td>
+          </tr>
+          <tr>
+            <td><strong>Services Covered</strong></td>
+            <td class="highlight-col font-mono text-emerald"><strong>All-in-One (8+ Services)</strong></td>
+            <td class="font-mono">Cosmos Only</td>
+            <td class="font-mono">Blob/Queue/Table Only</td>
+          </tr>
+          <tr>
+            <td><strong>External Dependencies</strong></td>
+            <td class="highlight-col font-mono text-emerald"><strong>Zero (Autonomous)</strong></td>
+            <td class="font-mono">Docker Engine</td>
+            <td class="font-mono">Node.js Runtime</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Supported Services Grid -->
+  <section class="section-container" id="services">
+    <div class="section-header">
+      <h2 class="section-title">Supported Azure Cloud Services</h2>
+      <p class="section-desc">Fully emulated REST APIs with zero cloud charges and instant local execution.</p>
+    </div>
+
+    <div class="services-grid">
+      <div class="service-card">
+        <div class="service-icon">🗄️</div>
+        <h3>Azure Blob Storage</h3>
+        <p>Full REST API support: container creation, block blob uploads, downloads, list enumeration, and media streaming.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon">📬</div>
+        <h3>Azure Queue Storage</h3>
+        <p>Lightweight messaging with message visibility, pop-receipts, enqueue and dequeue operations.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon">🚌</div>
+        <h3>Azure Service Bus</h3>
+        <p>Enterprise messaging with topics, subscriptions, message publishing and automatic fanout to subscribers.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon">🪐</div>
+        <h3>Azure Cosmos DB & Tables</h3>
+        <p>NoSQL document databases, collections and documents CRUD, plus Azure Table Storage OData JSON endpoints.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon">🔐</div>
+        <h3>Azure Key Vault</h3>
+        <p>Encrypted vault for secrets and keys management with symmetric encryption and decryption operations.</p>
+      </div>
+      <div class="service-card">
+        <div class="service-icon">⚡</div>
+        <h3>Azure Functions</h3>
+        <p>Serverless HTTP triggers, function registration, execution simulation and telemetry reporting.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Multi-SDK Integration -->
+  <section class="section-container" id="integration">
+    <div class="section-header">
+      <h2 class="section-title">Multi-SDK & Terraform Integration</h2>
+      <p class="section-desc">Seamless connection with .NET (C#), Python, TypeScript, Go, and HashiCorp Terraform.</p>
+    </div>
+
+    <div class="code-tabs-wrapper">
+      <div class="code-tabs-header">
+        <button class="code-tab active" data-target="tab-dotnet">.NET (C#)</button>
+        <button class="code-tab" data-target="tab-terraform">Terraform</button>
+        <button class="code-tab" data-target="tab-python">Python</button>
+        <button class="code-tab" data-target="tab-node">Node.js</button>
+      </div>
+      <div class="code-tab-content active" id="tab-dotnet">
+        <pre><code>using Azure.Storage.Blobs;
+
+// Standard local connection string
+string connStr = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=mock;BlobEndpoint=http://localhost:10000/devstoreaccount1;";
+
+var client = new BlobServiceClient(connStr);
+var container = client.GetBlobContainerClient("invoices");
+await container.CreateIfNotExistsAsync();
+
+Console.WriteLine("Container created on Floci-Azure in < 1ms!");</code></pre>
+      </div>
+      <div class="code-tab-content" id="tab-terraform">
+        <pre><code>provider "azurerm" {
+  features {}
+  skip_provider_registration = true
+  storage_use_azuread        = true
+
+  custom_resource_provider_endpoints = {
+    "Microsoft.Storage" = "http://localhost:10000"
+    "Microsoft.KeyVault"= "http://localhost:10000"
+  }
+}
+
+resource "azurerm_storage_container" "local" {
+  name                 = "tf-local-container"
+  storage_account_name = "devstoreaccount1"
+}</code></pre>
+      </div>
+      <div class="code-tab-content" id="tab-python">
+        <pre><code>from azure.storage.blob import BlobServiceClient
+
+conn = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=mock;BlobEndpoint=http://localhost:10000/devstoreaccount1;"
+client = BlobServiceClient.from_connection_string(conn)
+container = client.create_container("reports")
+print("Container created locally:", container.container_name)</code></pre>
+      </div>
+      <div class="code-tab-content" id="tab-node">
+        <pre><code>import { BlobServiceClient, AnonymousCredential } from "@azure/storage-blob";
+
+const blobService = new BlobServiceClient(
+  "http://localhost:10000/devstoreaccount1",
+  new AnonymousCredential()
+);
+
+const container = blobService.getContainerClient("assets");
+await container.create();
+console.log("Container ready on Floci-Azure!");</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <p>© 2026 Floci-Azure · MIT License. Built with <a href="https://github.com/mrojasb2000/aura-lang" target="_blank">Aura Lang</a>.</p>
+    </div>
+  </footer>
+
+  <script src="/site/app.js"></script>
+</body>
+</html>

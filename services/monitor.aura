@@ -1,0 +1,39 @@
+// ==============================================================================
+// FLOCI-AZURE: Azure Monitor & Application Insights Telemetry Ingestion
+// ==============================================================================
+
+import { getState } from "./state";
+import { auditRequest, logEvent, setMsHeaders, safeParseJson } from "./utils";
+
+export fn registerMonitorRoutes(mux: Any): Unit => {
+  // 1. App Insights Ingestion: POST /v2/track
+  let trackHandler = fn(req: Any, res: Any) => {
+    let s = getState();
+    let payload = safeParseJson(req.rawBody);
+    auditRequest(req, "Monitor", 200);
+    setMsHeaders(res);
+
+    let eventRecord = {
+      name: if (payload.name != ()) {`${payload.name}`}else {"AppEvent"},
+      time: "2026-09-28T12:00:00.000Z",
+      iKey: if (payload.iKey != ()) {`${payload.iKey}`}else {"local-ikey"},
+      data: if (payload.data != ()) {payload.data}else {{raw: req.rawBody}}
+    };
+
+    s.monitorLogs.push(eventRecord);
+    logEvent("MONITOR", "info", `Ingested telemetry item '${eventRecord.name}'`);
+
+    http.json(res, http.StatusOK, {itemsReceived: 1, itemsAccepted: 1, errors: []});
+  };
+
+  mux.post("/v2/track", trackHandler);
+  mux.post("/v1/telemetry", trackHandler);
+
+  // 2. Query Logs: GET /monitor/logs
+  mux.get("/monitor/logs", fn(req: Any, res: Any) => {
+    let s = getState();
+    auditRequest(req, "Monitor", 200);
+    setMsHeaders(res);
+    http.json(res, http.StatusOK, {logs: s.monitorLogs});
+  });
+};
